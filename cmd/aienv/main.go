@@ -23,6 +23,10 @@ import (
 	"aienv/internal/vault"
 )
 
+// version is set at build time via -ldflags "-X main.version=vX.Y.Z"
+// (see scripts/release.sh). Left as "dev" for local builds.
+var version = "dev"
+
 var keyNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 type env struct {
@@ -66,6 +70,9 @@ func run() error {
 		return e.cmdRotate(os.Args[2:])
 	case "-h", "--help", "help":
 		printUsage()
+		return nil
+	case "-v", "--version", "version":
+		fmt.Println("aienv " + version)
 		return nil
 	default:
 		printUsage()
