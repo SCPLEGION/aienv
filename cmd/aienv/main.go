@@ -6,6 +6,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"flag"
@@ -19,6 +20,7 @@ import (
 	"golang.org/x/term"
 
 	"aienv/internal/inject"
+	"aienv/internal/install"
 	"aienv/internal/registry"
 	"aienv/internal/vault"
 )
@@ -60,6 +62,8 @@ func run() error {
 	switch os.Args[1] {
 	case "list":
 		return e.cmdList(os.Args[2:])
+	case "exists":
+		return e.cmdExists(os.Args[2:])
 	case "put":
 		return e.cmdPut(os.Args[2:])
 	case "get":
@@ -68,6 +72,8 @@ func run() error {
 		return e.cmdRm(os.Args[2:])
 	case "rotate":
 		return e.cmdRotate(os.Args[2:])
+	case "install":
+		return e.cmdInstall(os.Args[2:])
 	case "-h", "--help", "help":
 		printUsage()
 		return nil
@@ -85,15 +91,26 @@ func printUsage() {
 
 Usage:
   aienv list
+  aienv exists <NAME> [--in <path>]
   aienv put <NAME> [--force]
   aienv get <NAME> --to <path> --mode append|replace|line [options] [--dry-run]
   aienv rm <NAME> [--yes]
   aienv rotate <NAME>
+  aienv install <target>
+  aienv --version
 
 get options:
   --placeholder <STRING>   required for --mode replace
   --line <N>               required for --mode line (1-indexed)
-  --at <start:end|start:>  required for --mode line, byte range within the line`)
+  --at <start:end|start:>  required for --mode line, byte range within the line
+
+install targets:
+  claude     global Claude Code skill (~/.claude/skills/aienv-secrets)
+  agents     AGENTS.md in the current project (also: codex, antigravity)
+  cursor     Cursor project rule (./.cursor/rules/aienv.mdc)
+  windsurf   Windsurf project rule (./.windsurf/rules/aienv.md)
+  all        install every target above
+  list       show this list`)
 }
 
 // splitNameArg pulls the leading positional NAME argument off args before
@@ -155,6 +172,61 @@ func (e env) cmdList(args []string) error {
 		entry, _ := reg.Get(name)
 		fmt.Printf("%-40s created %s\n", name, entry.Created)
 	}
+	return nil
+}
+
+// cmdExists is the safe alternative to grepping/catting a file to check
+// whether a secret is registered or already injected somewhere: it prints
+// only "yes"/"no" (exit 0/1) and never the value itself.
+func (e env) cmdExists(args []string) error {
+	name, rest, err := splitNameArg("exists", args)
+	if err != nil {
+		return err
+	}
+	fs := flag.NewFlagSet("exists", flag.ExitOnError)
+	in := fs.String("in", "", "also check whether NAME's current value already appears in this file")
+	fs.Parse(rest)
+
+	reg, err := registry.Load(e.registryPath)
+	if err != nil {
+		return err
+	}
+	entry, ok := reg.Get(name)
+	if !ok {
+		fmt.Println("no")
+		os.Exit(1)
+	}
+
+	if *in == "" {
+		fmt.Println("yes")
+		return nil
+	}
+
+	destPath, err := e.validateDestPath(*in)
+	if err != nil {
+		return err
+	}
+	fullVaultPath := filepath.Join(e.baseDir, entry.File)
+	value, err := vault.ReadSecret(fullVaultPath)
+	if err != nil {
+		return err
+	}
+
+	data, err := os.ReadFile(destPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Println("no")
+			os.Exit(1)
+		}
+		return fmt.Errorf("reading %s: %w", *in, err)
+	}
+
+	if bytes.Contains(data, value) {
+		fmt.Println("yes")
+		return nil
+	}
+	fmt.Println("no")
+	os.Exit(1)
 	return nil
 }
 
@@ -374,6 +446,58 @@ func (e env) cmdGet(args []string) error {
 		fmt.Printf("✓ wrote %s to %s (line %d, %d chars)\n", name, *to, *line, res.Chars)
 	}
 
+	return nil
+}
+
+// cmdInstall writes aienv's AI-agent integration guidance to the location a
+// given tool (Claude Code, Codex CLI, Antigravity, Cursor, Windsurf, ...)
+// reads it from, so a user never has to hand-copy AGENTS.md or a skill file
+// between projects themselves.
+func (e env) cmdInstall(args []string) error {
+	fs := flag.NewFlagSet("install", flag.ExitOnError)
+	fs.Parse(args)
+
+	if fs.NArg() != 1 {
+		return fmt.Errorf("usage: aienv install <target> (run 'aienv install list' to see targets)")
+	}
+	name := strings.ToLower(fs.Arg(0))
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolving home directory: %w", err)
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("resolving working directory: %w", err)
+	}
+
+	if name == "list" {
+		for _, t := range install.All() {
+			fmt.Printf("%-10s %s\n", t.Name, t.Describe)
+		}
+		return nil
+	}
+
+	if name == "all" {
+		for _, t := range install.All() {
+			path, err := install.Write(t, home, cwd)
+			if err != nil {
+				return fmt.Errorf("installing %s: %w", t.Name, err)
+			}
+			fmt.Printf("✓ %s -> %s\n", t.Name, path)
+		}
+		return nil
+	}
+
+	t, ok := install.Resolve(name)
+	if !ok {
+		return fmt.Errorf("unknown install target %q (run 'aienv install list')", name)
+	}
+	path, err := install.Write(t, home, cwd)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("✓ installed %s -> %s\n", t.Name, path)
 	return nil
 }
 

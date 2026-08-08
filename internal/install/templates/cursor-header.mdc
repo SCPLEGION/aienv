@@ -1,0 +1,6 @@
+---
+description: aienv — secure secrets CLI. Applies to any task that puts an API key, token, or password into a file.
+alwaysApply: true
+---
+
+# aienv — secure secrets injection

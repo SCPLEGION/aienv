@@ -37,6 +37,20 @@ DB_PASSWORD                             created 2026-07-18T09:12:03Z
 OPENAI_TOKEN                             created 2026-07-19T12:00:00Z
 ```
 
+### `exists`
+
+Check whether a secret is registered, and optionally whether its value is
+already present in a destination file — without ever printing the value.
+Prints `yes`/`no` and exits `0`/`1`, so it's safe for scripts (and AI agents)
+to use instead of grepping or catting a file to find out:
+
+```sh
+$ aienv exists OPENAI_TOKEN
+yes
+$ aienv exists OPENAI_TOKEN --in .env
+no
+```
+
 ### `put`
 
 Store a new secret under a logical name. The value is read from an
@@ -118,12 +132,33 @@ New value for OPENAI_TOKEN: <hidden input, not echoed>
 ✓ rotated OPENAI_TOKEN (54 chars, previous value backed up)
 ```
 
+### `install`
+
+Set up another AI tool to know about `aienv` automatically — writes (or
+merges into) whatever config file that tool reads its instructions from:
+
+```sh
+$ aienv install claude      # global Claude Code skill (~/.claude/skills/aienv-secrets)
+$ aienv install agents      # AGENTS.md in the current project (also: codex, antigravity)
+$ aienv install cursor      # ./.cursor/rules/aienv.mdc
+$ aienv install windsurf    # ./.windsurf/rules/aienv.md
+$ aienv install all         # every target above
+$ aienv install list        # show available targets
+```
+
+`agents`/`cursor`/`windsurf` are project-scoped — run them from inside the
+project you want the integration in. `claude` is global and works
+regardless of the current directory. Re-running any target is safe: it
+overwrites (dedicated files) or merges without duplicating (`AGENTS.md`).
+
 ## For AI agents
 
-If you're an AI coding agent working in a repo that uses `aienv`, read
-[`AGENTS.md`](AGENTS.md) before touching any secret-related task — it
-covers the one hard rule (never see or write a secret value yourself) and
-the exact command reference.
+If you're an AI coding agent working in a repo that uses `aienv`, run
+`aienv install <target>` for your tool (see above) to load the exact usage
+rules — including the one hard rule: never see or write a secret value
+yourself, and never grep/cat a file to check if one is already there (use
+`aienv exists` instead). [`AGENTS.md`](AGENTS.md) in this repo has the same
+content if your tool doesn't auto-load it.
 
 ## Security model
 
