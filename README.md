@@ -13,6 +13,20 @@ each time you need to inject them somewhere.
 
 ## Install
 
+**From a release tarball** (see [Releases](https://github.com/SCPLEGION/aienv/releases)):
+
+```sh
+tar -xzf aienv-vX.Y.Z-<os>-<arch>.tar.gz
+cd aienv-vX.Y.Z-<os>-<arch>
+./aienv install
+```
+
+`aienv install` (no target) copies the binary itself to `/usr/local/bin/aienv`,
+asking `[y/N]` to confirm first — pass `--yes` to skip the prompt. If
+`/usr/local/bin` isn't writable by your user, re-run as `sudo aienv install --yes`.
+
+**From source:**
+
 ```sh
 go build -o aienv ./cmd/aienv
 sudo install -m 755 aienv /usr/local/bin/aienv
@@ -132,10 +146,12 @@ New value for OPENAI_TOKEN: <hidden input, not echoed>
 ✓ rotated OPENAI_TOKEN (54 chars, previous value backed up)
 ```
 
-### `install`
+### `install <target>`
 
-Set up another AI tool to know about `aienv` automatically — writes (or
-merges into) whatever config file that tool reads its instructions from:
+`aienv install` with no argument installs the *binary itself* (see
+[Install](#install) above). `aienv install <target>` is different: it sets
+up another AI tool to know about `aienv` automatically, writing (or merging
+into) whatever config file that tool reads its instructions from:
 
 ```sh
 $ aienv install claude      # global Claude Code skill (~/.claude/skills/aienv-secrets)

@@ -96,6 +96,7 @@ Usage:
   aienv get <NAME> --to <path> --mode append|replace|line [options] [--dry-run]
   aienv rm <NAME> [--yes]
   aienv rotate <NAME>
+  aienv install [--yes]
   aienv install <target>
   aienv --version
 
@@ -104,7 +105,12 @@ get options:
   --line <N>               required for --mode line (1-indexed)
   --at <start:end|start:>  required for --mode line, byte range within the line
 
-install targets:
+install (no target): copies this binary to /usr/local/bin/aienv, asks to
+confirm unless --yes is given. This is what a downloaded release tarball's
+"cd <dir> && ./aienv install" is meant to do.
+
+install <target>: writes AI-tool integration guidance instead of installing
+the binary itself.
   claude     global Claude Code skill (~/.claude/skills/aienv-secrets)
   agents     AGENTS.md in the current project (also: codex, antigravity)
   cursor     Cursor project rule (./.cursor/rules/aienv.mdc)
@@ -449,16 +455,22 @@ func (e env) cmdGet(args []string) error {
 	return nil
 }
 
-// cmdInstall writes aienv's AI-agent integration guidance to the location a
-// given tool (Claude Code, Codex CLI, Antigravity, Cursor, Windsurf, ...)
-// reads it from, so a user never has to hand-copy AGENTS.md or a skill file
-// between projects themselves.
+// cmdInstall either self-installs the running binary onto the system PATH
+// (no target — the flow for a freshly downloaded/extracted release
+// tarball), or writes aienv's AI-agent integration guidance to the
+// location a given tool (Claude Code, Codex CLI, Antigravity, Cursor,
+// Windsurf, ...) reads it from, so a user never has to hand-copy AGENTS.md
+// or a skill file between projects themselves.
 func (e env) cmdInstall(args []string) error {
 	fs := flag.NewFlagSet("install", flag.ExitOnError)
+	yes := fs.Bool("yes", false, "skip confirmation prompts")
 	fs.Parse(args)
 
+	if fs.NArg() == 0 {
+		return cmdInstallSelf(*yes)
+	}
 	if fs.NArg() != 1 {
-		return fmt.Errorf("usage: aienv install <target> (run 'aienv install list' to see targets)")
+		return fmt.Errorf("usage: aienv install [<target>] (run 'aienv install list' to see targets)")
 	}
 	name := strings.ToLower(fs.Arg(0))
 
@@ -499,6 +511,62 @@ func (e env) cmdInstall(args []string) error {
 	}
 	fmt.Printf("✓ installed %s -> %s\n", t.Name, path)
 	return nil
+}
+
+// selfInstallDir is where `aienv install` (no target) copies the running
+// binary — the same location the README/Makefile already document.
+const selfInstallDir = "/usr/local/bin"
+
+// cmdInstallSelf lets a freshly downloaded/extracted release tarball
+// bootstrap itself: cd into it, run `./aienv install`, confirm, done.
+func cmdInstallSelf(yes bool) error {
+	exePath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolving current binary path: %w", err)
+	}
+	if resolved, err := filepath.EvalSymlinks(exePath); err == nil {
+		exePath = resolved
+	}
+
+	destPath := filepath.Join(selfInstallDir, "aienv")
+	if exePath == destPath {
+		fmt.Printf("aienv is already installed at %s\n", destPath)
+		return nil
+	}
+
+	if !yes {
+		fmt.Printf("Install aienv to %s? [y/N] ", destPath)
+		reader := bufio.NewReader(os.Stdin)
+		line, _ := reader.ReadString('\n')
+		if strings.ToLower(strings.TrimSpace(line)) != "y" {
+			fmt.Println("aborted")
+			return nil
+		}
+	}
+
+	path, err := install.SelfInstall(exePath, selfInstallDir)
+	if err != nil {
+		if os.IsPermission(err) {
+			return fmt.Errorf("permission denied writing to %s — re-run with: sudo aienv install --yes", selfInstallDir)
+		}
+		return err
+	}
+
+	fmt.Printf("✓ installed aienv -> %s\n", path)
+	if !onPath(selfInstallDir) {
+		fmt.Printf("note: %s is not on your PATH — add it to use the plain \"aienv\" command\n", selfInstallDir)
+	}
+	return nil
+}
+
+// onPath reports whether dir appears in $PATH.
+func onPath(dir string) bool {
+	for _, p := range filepath.SplitList(os.Getenv("PATH")) {
+		if p == dir {
+			return true
+		}
+	}
+	return false
 }
 
 // readSecretInteractive prompts on stderr and reads a value from the

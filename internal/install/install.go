@@ -1,8 +1,9 @@
-// Package install writes aienv's AI-agent integration files (a Claude Code
-// skill, AGENTS.md, Cursor/Windsurf project rules) to the right location
-// for each tool, so a user never has to hand-copy them between projects.
-// All template content is embedded at compile time, keeping the binary
-// self-contained.
+// Package install handles everything behind `aienv install`: copying the
+// aienv binary itself onto the system PATH (SelfInstall), and writing
+// aienv's AI-agent integration files (a Claude Code skill, AGENTS.md,
+// Cursor/Windsurf project rules) to the right location for each tool, so a
+// user never has to hand-copy them between projects. All template content
+// is embedded at compile time, keeping the binary self-contained.
 package install
 
 import (
@@ -122,6 +123,20 @@ func Write(t Target, home, cwd string) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// SelfInstall copies the binary at exePath into destDir as "aienv" with
+// executable (0755) permissions, atomically. Returns the path written.
+func SelfInstall(exePath, destDir string) (string, error) {
+	data, err := os.ReadFile(exePath)
+	if err != nil {
+		return "", fmt.Errorf("reading %s: %w", exePath, err)
+	}
+	destPath := filepath.Join(destDir, "aienv")
+	if err := inject.AtomicWriteFile(destPath, data, 0o755); err != nil {
+		return "", err
+	}
+	return destPath, nil
 }
 
 // mergeBlock wraps block in marker comments and splices it into the

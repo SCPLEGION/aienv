@@ -7,6 +7,43 @@ import (
 	"testing"
 )
 
+func TestSelfInstall(t *testing.T) {
+	srcDir := t.TempDir()
+	destDir := t.TempDir()
+
+	srcPath := filepath.Join(srcDir, "aienv-downloaded")
+	content := []byte("fake binary content")
+	if err := os.WriteFile(srcPath, content, 0o644); err != nil {
+		t.Fatalf("seeding fake binary: %v", err)
+	}
+
+	destPath, err := SelfInstall(srcPath, destDir)
+	if err != nil {
+		t.Fatalf("SelfInstall: %v", err)
+	}
+
+	wantPath := filepath.Join(destDir, "aienv")
+	if destPath != wantPath {
+		t.Fatalf("SelfInstall returned %q, want %q", destPath, wantPath)
+	}
+
+	got, err := os.ReadFile(destPath)
+	if err != nil {
+		t.Fatalf("reading installed binary: %v", err)
+	}
+	if string(got) != string(content) {
+		t.Fatalf("installed binary content = %q, want %q", got, content)
+	}
+
+	info, err := os.Stat(destPath)
+	if err != nil {
+		t.Fatalf("stat installed binary: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o755 {
+		t.Fatalf("installed binary permissions = %o, want 0755", perm)
+	}
+}
+
 func TestResolve(t *testing.T) {
 	if _, ok := Resolve("claude"); !ok {
 		t.Fatal(`expected Resolve("claude") to succeed`)
