@@ -118,6 +118,13 @@ New value for OPENAI_TOKEN: <hidden input, not echoed>
 ✓ rotated OPENAI_TOKEN (54 chars, previous value backed up)
 ```
 
+## For AI agents
+
+If you're an AI coding agent working in a repo that uses `aienv`, read
+[`AGENTS.md`](AGENTS.md) before touching any secret-related task — it
+covers the one hard rule (never see or write a secret value yourself) and
+the exact command reference.
+
 ## Security model
 
 - **Secret values never touch stdout, stderr, or logs.** `put` and `rotate`
