@@ -530,7 +530,18 @@ func cmdInstallSelf(yes bool) error {
 
 	destPath := filepath.Join(selfInstallDir, "aienv")
 	if exePath == destPath {
-		fmt.Printf("aienv is already installed at %s\n", destPath)
+		// Typing the bare "aienv install" makes the shell resolve "aienv"
+		// via $PATH, which finds the already-installed binary at destPath
+		// — not a differently-versioned one sitting in the current
+		// directory, even if that's what the user meant to install. Catch
+		// that here instead of silently reporting success and doing
+		// nothing.
+		if local, ok := differentLocalBinary(destPath); ok {
+			fmt.Printf("aienv %s is already installed at %s, but this directory has a different build at %s.\n", version, destPath, local)
+			fmt.Println(`Run it explicitly to install that one instead: ./aienv install`)
+			return nil
+		}
+		fmt.Printf("aienv %s is already installed at %s\n", version, destPath)
 		return nil
 	}
 
@@ -567,6 +578,25 @@ func onPath(dir string) bool {
 		}
 	}
 	return false
+}
+
+// differentLocalBinary checks the current directory for an "aienv" file
+// that isn't the one already installed at destPath (e.g. a freshly
+// extracted release tarball sitting next to an older installed version).
+func differentLocalBinary(destPath string) (string, bool) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", false
+	}
+	local := filepath.Join(cwd, "aienv")
+	resolved, err := filepath.EvalSymlinks(local)
+	if err != nil {
+		return "", false
+	}
+	if resolved == destPath {
+		return "", false
+	}
+	return local, true
 }
 
 // readSecretInteractive prompts on stderr and reads a value from the
